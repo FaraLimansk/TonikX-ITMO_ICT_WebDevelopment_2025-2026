@@ -5,7 +5,7 @@ from datetime import datetime
 
 
 class ChatServer:
-    def __init__(self, host='localhost', port=8080):
+    def __init__(self, host='localhost', port=5050):
         self.host = host
         self.port = port
         self.clients = {}  # {socket: {'username': 'name', 'address': addr}}

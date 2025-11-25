@@ -5,7 +5,7 @@ import sys
 
 
 class ChatClient:
-    def __init__(self, host='localhost', port=8080):
+    def __init__(self, host='localhost', port=5050):
         self.host = host
         self.port = port
         self.socket = None
