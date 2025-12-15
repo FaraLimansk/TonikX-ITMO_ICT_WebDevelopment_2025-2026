@@ -1,6 +1,7 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from .models import Race, RaceRegistration, RaceResult
 
 
@@ -13,8 +14,20 @@ def race_detail(request, race_id):
     race = get_object_or_404(Race, id=race_id)
     results = RaceResult.objects.filter(race=race).order_by('position')
     registrations = RaceRegistration.objects.filter(race=race, is_confirmed=True)
-    user_registration = None
 
+    # Пагинация комментариев
+    comments_list = race.comment_set.all().order_by('-created_at')
+    paginator = Paginator(comments_list, 5)  # комменты пажилые
+    page_number = request.GET.get('page', 1)
+
+    try:
+        page_obj = paginator.page(page_number)
+    except PageNotAnInteger:
+        page_obj = paginator.page(1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages)
+
+    user_registration = None
     if request.user.is_authenticated:
         user_registration = RaceRegistration.objects.filter(race=race, user=request.user).first()
 
@@ -23,6 +36,8 @@ def race_detail(request, race_id):
         'results': results,
         'registrations': registrations,
         'user_registration': user_registration,
+        'page_obj': page_obj,  # Передаем пагинированные комментарии
+        'comments': page_obj.object_list,  # Для совместимости
     })
 
 
