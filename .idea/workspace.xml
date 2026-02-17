@@ -5,11 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4f9efb02-13ef-45f1-bcd2-367d555edd08" name="Changes" comment="report">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/docs-project/mkdocs.yml" beforeDir="false" afterPath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/docs-project/mkdocs.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/api/serializers.py" beforeDir="false" afterPath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/api/serializers.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/api/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/api/urls.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/api/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/api/views.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/config/settings.py" beforeDir="false" afterPath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/config/settings.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -71,7 +69,7 @@
     "ignore.virus.scanning.warn.message": "true",
     "junie.onboarding.icon.badge.shown": "true",
     "last_opened_file_path": "C:/Users/Ivan/PycharmProjects/TonikX-ITMO_ICT_WebDevelopment_2025-2026/students/k3340/laboratory_works/Fedorov_Ivan/docs-project/docs",
-    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
+    "settings.editor.selected.configurable": "preferences.fileTypes",
     "to.speed.mode.migration.done": "true"
   }
 }]]></component>
