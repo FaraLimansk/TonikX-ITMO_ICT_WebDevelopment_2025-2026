@@ -2,15 +2,21 @@ from rest_framework import viewsets, generics, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Q, Count, Sum
+from django.db.models import Q, Count
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from datetime import datetime, timedelta
-from hotel.models import Room, Client, Employee, CleaningSchedule
-from api.serializers import *
 
-# Временные фильтры прямо в views.py
+from hotel.models import Room, Client, Employee, CleaningSchedule
+from api.serializers import (
+    RoomSerializer, ClientSerializer, EmployeeSerializer, CleaningScheduleSerializer,
+    RoomClientsPeriodSerializer, ClientSamePeriodSerializer
+)
+
 import django_filters
 
+
+# -------------------- FILTERS --------------------
 
 class RoomFilter(django_filters.FilterSet):
     room_type = django_filters.ChoiceFilter(choices=Room.ROOM_TYPES)
@@ -33,6 +39,8 @@ class ClientFilter(django_filters.FilterSet):
         fields = ['city', 'room']
 
 
+# -------------------- VIEWSETS --------------------
+
 class RoomViewSet(viewsets.ModelViewSet):
     queryset = Room.objects.all()
     serializer_class = RoomSerializer
@@ -41,30 +49,39 @@ class RoomViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def available(self, request):
-        """Свободные номера"""
+        """
+        Свободные номера + сколько их (по ТЗ).
+        """
         rooms = Room.objects.filter(is_available=True)
         serializer = self.get_serializer(rooms, many=True)
-        return Response(serializer.data)
+        return Response({
+            "count": rooms.count(),
+            "results": serializer.data
+        })
 
     @action(detail=False, methods=['post'])
     def clients_in_period(self, request):
-        """Клиенты в номере за период"""
+        """
+        Клиенты, проживавшие в заданном номере, в заданный период времени (по ТЗ).
+        Пересечение периодов:
+        client.check_in <= end AND (client.check_out >= start OR check_out is null)
+        """
         serializer = RoomClientsPeriodSerializer(data=request.data)
-        if serializer.is_valid():
-            room_id = serializer.validated_data['room_id']
-            start_date = serializer.validated_data['start_date']
-            end_date = serializer.validated_data['end_date']
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            clients = Client.objects.filter(
-                room_id=room_id,
-                check_in_date__lte=end_date,
-            ).filter(
-                Q(check_out_date__gte=start_date) | Q(check_out_date__isnull=True)
-            )
+        room_id = serializer.validated_data['room_id']
+        start_date = serializer.validated_data['start_date']
+        end_date = serializer.validated_data['end_date']
 
-            result = ClientSerializer(clients, many=True).data
-            return Response(result)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        clients = Client.objects.filter(
+            room_id=room_id,
+            check_in_date__lte=end_date,
+        ).filter(
+            Q(check_out_date__gte=start_date) | Q(check_out_date__isnull=True)
+        )
+
+        return Response(ClientSerializer(clients, many=True).data)
 
 
 class ClientViewSet(viewsets.ModelViewSet):
@@ -73,62 +90,113 @@ class ClientViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = ClientFilter
 
+    def perform_create(self, serializer):
+        """
+        Поселить клиента (по ТЗ):
+        - создать запись клиента
+        - если клиент не выселен (check_out_date is null) -> номер становится занятым
+        """
+        client = serializer.save()
+        if client.check_out_date is None:
+            room = client.room
+            room.is_available = False
+            room.save()
+
     @action(detail=False, methods=['get'])
     def from_city(self, request):
-        """Количество клиентов из города"""
+        """
+        Количество клиентов, прибывших из заданного города (по ТЗ).
+        """
         city = request.query_params.get('city')
-        if city:
-            count = Client.objects.filter(city__iexact=city).count()
-            return Response({'city': city, 'count': count})
-        return Response({'error': 'Укажите параметр city'}, status=400)
+        if not city:
+            return Response({'error': 'Укажите параметр city'}, status=status.HTTP_400_BAD_REQUEST)
+
+        count = Client.objects.filter(city__iexact=city).count()
+        return Response({'city': city, 'count': count})
+
+    @action(detail=True, methods=['post'])
+    def check_out(self, request, pk=None):
+        """
+        Выселить клиента (по ТЗ):
+        - ставим дату выселения
+        - освобождаем номер
+        """
+        client = self.get_object()
+        raw = request.data.get('check_out_date')
+
+        if raw:
+            dt = parse_date(raw)
+            if not dt:
+                return Response(
+                    {'error': 'Неверный формат check_out_date. Используйте YYYY-MM-DD'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            check_out_date = dt
+        else:
+            check_out_date = timezone.now().date()
+
+        client.check_out_date = check_out_date
+        client.save()
+
+        room = client.room
+        room.is_available = True
+        room.save()
+
+        return Response({
+            'status': 'клиент выселен',
+            'client_id': client.id,
+            'check_out_date': client.check_out_date,
+            'room_number': room.number,
+            'room_status': 'свободен'
+        })
 
     @action(detail=False, methods=['post'])
     def same_period_clients(self, request):
-        """Клиенты, проживавшие в тот же период"""
+        """
+        Список клиентов с городом, которые проживали в те же дни, что и заданный клиент,
+        в определенный период времени (по ТЗ).
+        """
         serializer = ClientSamePeriodSerializer(data=request.data)
-        if serializer.is_valid():
-            client_id = serializer.validated_data['client_id']
-            start_date = serializer.validated_data['start_date']
-            end_date = serializer.validated_data['end_date']
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            try:
-                target_client = Client.objects.get(id=client_id)
-                target_check_in = target_client.check_in_date
-                target_check_out = target_client.check_out_date or timezone.now().date()
+        client_id = serializer.validated_data['client_id']
+        start_date = serializer.validated_data['start_date']
+        end_date = serializer.validated_data['end_date']
 
-                # Находим пересекающиеся периоды
-                clients = Client.objects.exclude(id=client_id).filter(
-                    Q(check_in_date__lte=end_date) &
-                    Q(
-                        Q(check_out_date__gte=start_date) |
-                        Q(check_out_date__isnull=True)
-                    )
-                )
+        try:
+            Client.objects.get(id=client_id)
+        except Client.DoesNotExist:
+            return Response({'error': 'Клиент не найден'}, status=status.HTTP_404_NOT_FOUND)
 
-                result = []
-                for client in clients:
-                    result.append({
-                        'id': client.id,
-                        'full_name': f"{client.last_name} {client.first_name}",
-                        'city': client.city,
-                        'check_in': client.check_in_date,
-                        'check_out': client.check_out_date,
-                        'room': client.room.number
-                    })
+        # Ищем клиентов, чьи периоды пересекаются с заданным интервалом
+        clients = Client.objects.exclude(id=client_id).filter(
+            Q(check_in_date__lte=end_date) &
+            (
+                Q(check_out_date__gte=start_date) |
+                Q(check_out_date__isnull=True)
+            )
+        ).select_related('room')
 
-                return Response(result)
-            except Client.DoesNotExist:
-                return Response({'error': 'Клиент не найден'}, status=404)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        result = [{
+            'id': c.id,
+            'full_name': f"{c.last_name} {c.first_name}",
+            'city': c.city,
+            'check_in': c.check_in_date,
+            'check_out': c.check_out_date,
+            'room': c.room.number
+        } for c in clients]
+
+        return Response(result)
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
-    queryset = Employee.objects.all()  # Убираем фильтр is_active
+    queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
 
     @action(detail=True, methods=['post'])
     def fire(self, request, pk=None):
-        """Уволить сотрудника"""
+        """Уволить сотрудника (по ТЗ)"""
         employee = self.get_object()
         employee.is_active = False
         employee.save()
@@ -136,79 +204,25 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def hire(self, request, pk=None):
-        """Нанять сотрудника обратно"""
+        """Принять обратно на работу (по ТЗ)"""
         employee = self.get_object()
         employee.is_active = True
         employee.save()
         return Response({'status': 'сотрудник нанят'})
-
-    @action(detail=True, methods=['get'])
-    def cleaning_info(self, request, pk=None):
-        """Кто убирал номер клиента в заданный день"""
-        employee = self.get_object()
-        client_id = request.query_params.get('client_id')
-        day = request.query_params.get('day')
-
-        if not client_id or not day:
-            return Response({'error': 'Укажите client_id и day'}, status=400)
-
-        try:
-            client = Client.objects.get(id=client_id)
-            schedules = CleaningSchedule.objects.filter(
-                employee=employee,
-                floor=client.room.floor,
-                day_of_week=day
-            )
-            serializer = CleaningScheduleSerializer(schedules, many=True)
-            return Response(serializer.data)
-        except Client.DoesNotExist:
-            return Response({'error': 'Клиент не найден'}, status=404)
 
     @action(detail=False, methods=['get'])
     def active(self, request):
-        """Только активные сотрудники"""
+        """Список активных сотрудников"""
         employees = Employee.objects.filter(is_active=True)
-        serializer = self.get_serializer(employees, many=True)
-        return Response(serializer.data)
-
-    # В class EmployeeViewSet добавьте:
-    @action(detail=True, methods=['post'])
-    def hire(self, request, pk=None):
-        """Нанять сотрудника обратно"""
-        employee = self.get_object()
-        employee.is_active = True
-        employee.save()
-        return Response({'status': 'сотрудник нанят'})
-
-    # В class ClientViewSet добавьте:
-    @action(detail=True, methods=['post'])
-    def check_out(self, request, pk=None):
-        """Выселить клиента"""
-        client = self.get_object()
-        check_out_date = request.data.get('check_out_date')
-
-        if not check_out_date:
-            client.check_out_date = timezone.now().date()
-        else:
-            client.check_out_date = check_out_date
-
-        # Освобождаем номер
-        client.room.is_available = True
-        client.room.save()
-
-        client.save()
-
-        return Response({
-            'status': 'клиент выселен',
-            'client_id': client.id,
-            'check_out_date': client.check_out_date,
-            'room_number': client.room.number,
-            'room_status': 'свободен'
-        })
+        return Response(self.get_serializer(employees, many=True).data)
 
     @action(detail=False, methods=['get'])
     def who_cleaned_client_room(self, request):
-        """Кто убирал номер указанного клиента в заданный день"""
+        """
+        Кто из служащих убирал номер указанного клиента в заданный день недели (по ТЗ).
+        GET /api/employees/who_cleaned_client_room/?client_id=1&day=mon
+        day: mon,tue,wed,thu,fri,sat,sun
+        """
         client_id = request.query_params.get('client_id')
         day_of_week = request.query_params.get('day')
 
@@ -219,37 +233,29 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            client = Client.objects.get(id=client_id)
-            room_floor = client.room.floor
-
-            # Ищем сотрудников, которые убирают этот этаж в указанный день
-            schedules = CleaningSchedule.objects.filter(
-                floor=room_floor,
-                day_of_week=day_of_week
-            ).select_related('employee')
-
-            result = []
-            for schedule in schedules:
-                result.append({
-                    'employee_id': schedule.employee.id,
-                    'employee_name': str(schedule.employee),
-                    'floor': schedule.floor,
-                    'day_of_week': schedule.get_day_of_week_display(),
-                    'client_info': {
-                        'id': client.id,
-                        'name': f"{client.last_name} {client.first_name}",
-                        'room_number': client.room.number,
-                        'room_floor': client.room.floor
-                    }
-                })
-
-            return Response(result)
-
+            client = Client.objects.select_related('room').get(id=client_id)
         except Client.DoesNotExist:
-            return Response(
-                {'error': 'Клиент не найден'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({'error': 'Клиент не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+        schedules = CleaningSchedule.objects.filter(
+            floor=client.room.floor,
+            day_of_week=day_of_week
+        ).select_related('employee')
+
+        result = [{
+            'employee_id': s.employee.id,
+            'employee_name': str(s.employee),
+            'floor': s.floor,
+            'day_of_week': s.get_day_of_week_display(),
+            'client': {
+                'id': client.id,
+                'name': f"{client.last_name} {client.first_name}",
+                'room_number': client.room.number,
+                'room_floor': client.room.floor,
+            }
+        } for s in schedules]
+
+        return Response(result)
 
 
 class CleaningScheduleViewSet(viewsets.ModelViewSet):
@@ -257,143 +263,101 @@ class CleaningScheduleViewSet(viewsets.ModelViewSet):
     serializer_class = CleaningScheduleSerializer
 
 
+# -------------------- REPORT --------------------
+
 class ReportView(generics.GenericAPIView):
-    """Отчёт за квартал"""
+    """
+    Автоматическая выдача отчета за квартал (по ТЗ).
+    GET /api/report/?quarter=4&year=2024
+    """
 
     def get(self, request):
         quarter = request.query_params.get('quarter')
         year = request.query_params.get('year')
 
-        # Проверяем обязательные параметры
         if not quarter or not year:
-            return Response(
-                {'error': 'Необходимы параметры quarter и year'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Необходимы параметры quarter и year'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             quarter = int(quarter)
             year = int(year)
+        except ValueError:
+            return Response({'error': 'quarter и year должны быть числами'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Проверяем валидность quarter
-            if quarter not in [1, 2, 3, 4]:
-                return Response(
-                    {'error': 'Квартал должен быть 1, 2, 3 или 4'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        if quarter not in [1, 2, 3, 4]:
+            return Response({'error': 'Квартал должен быть 1, 2, 3 или 4'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Проверяем валидность года
-            if year < 2000 or year > 2100:
-                return Response(
-                    {'error': 'Год должен быть между 2000 и 2100'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        # период квартала
+        month_start = (quarter - 1) * 3 + 1
+        start_date = datetime(year, month_start, 1).date()
 
-            # Определяем месяцы квартала
-            month_start = (quarter - 1) * 3 + 1
-            start_date = datetime(year, month_start, 1).date()
+        if quarter == 4:
+            end_date = datetime(year + 1, 1, 1).date() - timedelta(days=1)
+        else:
+            end_date = datetime(year, month_start + 3, 1).date() - timedelta(days=1)
 
-            # Конец квартала
-            if quarter == 4:
-                end_date = datetime(year + 1, 1, 1).date() - timedelta(days=1)
-            else:
-                end_date = datetime(year, month_start + 3, 1).date() - timedelta(days=1)
+        # 1) число клиентов за период в каждом номере
+        clients_by_room = Client.objects.filter(
+            check_in_date__lte=end_date
+        ).filter(
+            Q(check_out_date__gte=start_date) | Q(check_out_date__isnull=True)
+        ).values('room__number', 'room__room_type').annotate(
+            client_count=Count('id')
+        ).order_by('room__number')
 
-            # Клиенты по номерам
-            clients_by_room = Client.objects.filter(
+        # 2) количество номеров на каждом этаже
+        rooms_by_floor = Room.objects.values('floor').annotate(
+            room_count=Count('id')
+        ).order_by('floor')
+
+        # 3) общая сумма дохода за каждый номер + 4) суммарный доход по гостинице
+        income_by_room = []
+        total_income = 0
+
+        rooms = Room.objects.all()
+        for room in rooms:
+            room_clients = Client.objects.filter(
+                room=room,
                 check_in_date__lte=end_date
             ).filter(
                 Q(check_out_date__gte=start_date) | Q(check_out_date__isnull=True)
-            ).values('room__number', 'room__room_type').annotate(
-                client_count=Count('id')
-            ).order_by('room__number')
+            )
 
-            # Номера по этажам
-            rooms_by_floor = Room.objects.values('floor').annotate(
-                room_count=Count('id'),
-                available_count=Count('id', filter=Q(is_available=True))
-            ).order_by('floor')
-
-            # Доход по номерам
-            income_by_room = []
-            total_income = 0
-
-            for room in Room.objects.all():
-                room_clients = Client.objects.filter(
-                    room=room,
-                    check_in_date__lte=end_date
-                ).filter(
-                    Q(check_out_date__gte=start_date) | Q(check_out_date__isnull=True)
+            room_income = 0
+            for client in room_clients:
+                days = self._days_in_period(
+                    client.check_in_date,
+                    client.check_out_date or timezone.now().date(),
+                    start_date,
+                    end_date
                 )
+                room_income += days * room.price_per_day
 
-                room_income = 0
-                for client in room_clients:
-                    days_in_quarter = self._days_in_period(
-                        client.check_in_date,
-                        client.check_out_date or timezone.now().date(),
-                        start_date,
-                        end_date
-                    )
-                    room_income += days_in_quarter * room.price_per_day
+            income_by_room.append({
+                'room_number': room.number,
+                'room_type': room.get_room_type_display(),
+                'floor': room.floor,
+                'income': float(room_income),
+            })
+            total_income += room_income
 
-                income_by_room.append({
-                    'room_number': room.number,
-                    'room_type': room.get_room_type_display(),
-                    'floor': room.floor,
-                    'income': float(room_income),
-                    'days_in_quarter': self._days_in_period(
-                        start_date, end_date, start_date, end_date
-                    )  # всего дней в квартале
-                })
-                total_income += room_income
+        report = {
+            'period': f'{year} Q{quarter}',
+            'start_date': start_date.isoformat(),
+            'end_date': end_date.isoformat(),
+            'clients_by_room': list(clients_by_room),
+            'rooms_by_floor': list(rooms_by_floor),
+            'income_by_room': income_by_room,
+            'total_income': float(total_income),
+            'generated_at': timezone.now().isoformat()
+        }
 
-            # Общая статистика
-            total_clients = Client.objects.filter(
-                check_in_date__lte=end_date
-            ).filter(
-                Q(check_out_date__gte=start_date) | Q(check_out_date__isnull=True)
-            ).count()
-
-            avg_income_per_room = total_income / Room.objects.count() if Room.objects.count() > 0 else 0
-
-            report = {
-                'period': f'{year} Q{quarter}',
-                'start_date': start_date.isoformat(),
-                'end_date': end_date.isoformat(),
-                'total_rooms': Room.objects.count(),
-                'total_clients': total_clients,
-                'clients_by_room': list(clients_by_room),
-                'rooms_by_floor': list(rooms_by_floor),
-                'income_by_room': income_by_room,
-                'total_income': float(total_income),
-                'average_income_per_room': float(avg_income_per_room),
-                'generated_at': timezone.now().isoformat()
-            }
-
-            return Response(report)
-
-        except ValueError as e:
-            return Response(
-                {'error': f'Неверный формат данных: {str(e)}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        except Exception as e:
-            return Response(
-                {'error': f'Внутренняя ошибка: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        return Response(report)
 
     def _days_in_period(self, check_in, check_out, period_start, period_end):
-        """Вычисляет количество дней в периоде"""
-        start = max(check_in, period_start)
-        end = min(check_out, period_end) if check_out else period_end
-
-        if start > end:
-            return 0
-
-        return (end - start).days + 1
-
-    def _days_in_period(self, check_in, check_out, period_start, period_end):
+        """
+        Количество дней проживания, попавших в указанный период (включительно).
+        """
         start = max(check_in, period_start)
         end = min(check_out, period_end) if check_out else period_end
         if start > end:

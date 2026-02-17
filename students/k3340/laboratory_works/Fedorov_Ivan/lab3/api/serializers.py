@@ -9,24 +9,6 @@ class UserSerializer(serializers.ModelSerializer):
         fields = ['id', 'username', 'email', 'first_name', 'last_name']
 
 
-class CustomUserCreateSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True)
-
-    class Meta:
-        model = User
-        fields = ['username', 'password', 'email', 'first_name', 'last_name']
-
-    def create(self, validated_data):
-        user = User.objects.create_user(**validated_data)
-        return user
-
-
-class CustomUserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name']
-
-
 class RoomSerializer(serializers.ModelSerializer):
     class Meta:
         model = Room
@@ -40,6 +22,23 @@ class ClientSerializer(serializers.ModelSerializer):
         model = Client
         fields = '__all__'
 
+    def validate(self, attrs):
+        """
+        Нельзя заселять в занятый номер, если клиент заселяется check_out_date = None"""
+        room = attrs.get('room') or getattr(self.instance, 'room', None)
+        check_out_date = attrs.get('check_out_date', getattr(self.instance, 'check_out_date', None))
+
+        # если пытаемся создать/обновить "текущего" клиента (не выселен)
+        if room and check_out_date is None:
+            # при update допускаем, что клиент уже в этом номере
+            if not room.is_available:
+                # если это update и комната та же и клиент тот же — ок
+                if not self.instance or self.instance.room_id != room.id:
+                    raise serializers.ValidationError(
+                        {'room': 'Номер занят. Нельзя поселить клиента в занятый номер.'}
+                    )
+        return attrs
+
 
 class EmployeeSerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(write_only=True, required=False)
@@ -48,11 +47,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = '__all__'
-        extra_fields = ['username']
 
     def create(self, validated_data):
         user_id = validated_data.pop('user_id', None)
-
         employee = Employee.objects.create(**validated_data)
 
         if user_id:

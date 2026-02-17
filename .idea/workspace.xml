@@ -5,9 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="4f9efb02-13ef-45f1-bcd2-367d555edd08" name="Changes" comment="report">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/docs-project/mkdocs.yml" beforeDir="false" afterPath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/docs-project/mkdocs.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab1/task4/chat_client.py" beforeDir="false" afterPath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab1/task4/chat_client.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab1/task4/chat_server.py" beforeDir="false" afterPath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab1/task4/chat_server.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/api/serializers.py" beforeDir="false" afterPath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/api/serializers.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/api/urls.py" beforeDir="false" afterPath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/api/urls.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/api/views.py" beforeDir="false" afterPath="$PROJECT_DIR$/students/k3340/laboratory_works/Fedorov_Ivan/lab3/api/views.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -68,18 +70,20 @@
     "git-widget-placeholder": "main",
     "ignore.virus.scanning.warn.message": "true",
     "junie.onboarding.icon.badge.shown": "true",
-    "last_opened_file_path": "C:/Users/Ivan/PycharmProjects/TonikX-ITMO_ICT_WebDevelopment_2025-2026/students/k3340/laboratory_works/Fedorov_Ivan/lab2/users",
+    "last_opened_file_path": "C:/Users/Ivan/PycharmProjects/TonikX-ITMO_ICT_WebDevelopment_2025-2026/students/k3340/laboratory_works/Fedorov_Ivan/docs-project/docs",
     "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable",
     "to.speed.mode.migration.done": "true"
   }
 }]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\Ivan\PycharmProjects\TonikX-ITMO_ICT_WebDevelopment_2025-2026\students\k3340\laboratory_works\Fedorov_Ivan\docs-project\docs" />
+      <recent name="C:\Users\Ivan\PycharmProjects\TonikX-ITMO_ICT_WebDevelopment_2025-2026\students\k3340\laboratory_works\Fedorov_Ivan\docs-project\docs\assets" />
       <recent name="C:\Users\Ivan\PycharmProjects\TonikX-ITMO_ICT_WebDevelopment_2025-2026\students\k3340\laboratory_works\Fedorov_Ivan\lab2\users" />
       <recent name="C:\Users\Ivan\PycharmProjects\TonikX-ITMO_ICT_WebDevelopment_2025-2026\students\k3340\laboratory_works\Fedorov_Ivan\lab1\task2" />
     </key>
   </component>
-  <component name="RunManager">
+  <component name="RunManager" selected="Python.chat_server">
     <configuration name="chat_client" type="PythonConfigurationType" factoryName="Python" singleton="false" temporary="true" nameIsGenerated="true">
       <module name="TonikX-ITMO_ICT_WebDevelopment_2025-2026" />
       <option name="ENV_FILES" value="" />
